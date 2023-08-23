@@ -17,12 +17,11 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
 from langchain.chains import RetrievalQA
-from migrate import flask_db
 import os
 from flask_admin import Admin,AdminIndexView
 from flask_admin.contrib.sqla import ModelView
-from flask_login import LoginManager, login_user, logout_user, current_user
-from migrate import users
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_sqlalchemy import SQLAlchemy
 
 load_dotenv()
 
@@ -38,9 +37,15 @@ handler.setFormatter(formatter)
 
 logger.addHandler(handler)
 app = Flask(__name__)
-
+flask_db = SQLAlchemy()
 app.secret_key= "512204f79fd3812be92b17c211b06d82"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chatbot.db'
+class users(flask_db.Model,UserMixin):
+    id = flask_db.Column(flask_db.Integer, primary_key=True)
+    name = flask_db.Column(flask_db.String(80), unique=True)
+    password = flask_db.Column(flask_db.String(120))
+    is_admin = flask_db.Column(flask_db.Boolean, default=False)
+
 with app.app_context():
     flask_db.init_app(app)
     flask_db.create_all()  
