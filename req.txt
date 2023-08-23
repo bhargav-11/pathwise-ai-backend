@@ -15,3 +15,4 @@ flask
 flask_cors
 flask-sqlalchemy == 3.0.5
 flask_admin
+flask_login

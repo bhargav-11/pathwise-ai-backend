@@ -52,7 +52,7 @@ with app.app_context():
 
 def create_first_admin_user():
     if not users.query.filter_by(is_admin=True).first():
-        new_user = users(name=os.getenv('username'), password=os.getenv('password'), is_admin=True)
+        new_user = users(name=os.getenv('admin_username'), password=os.getenv('admin_password'), is_admin=True)
         flask_db.session.add(new_user)
         flask_db.session.commit()
 
@@ -399,16 +399,14 @@ def user_login():
     import json
     if request.method == 'POST':
         data = json.loads(request.data.decode('utf-8'))
-        print("UVJJHHJ :", data)
-
         username = data.get('username')
         password = data.get('password')
         user = users.query.filter_by(name=username).first()
         if user and user.password == password:
-                if user.is_admin == 0:
-                    return jsonify({"message": "user login"}), 200
+            if user.is_admin == 0:
+                return jsonify({"message": "logged In"}), 200
                 
-    return jsonify({"message": "Bad request"}), 400
+    return jsonify({"message": "username or password is incorrect or you are an admin"}), 400
 if __name__ == '__main__':
     app.run(debug=True)
    
