@@ -13,3 +13,4 @@ tiktoken==0.4.0
 PyPDF2
 flask
 flask_cors
+flask_sqlalchemy 
