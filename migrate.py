@@ -1,16 +1,8 @@
-import sqlite3          
-con = sqlite3.connect("chatbot.db")     
+import sqlite3   
+import os    
+os.mkdir("instance") 
+con = sqlite3.connect("instance/chatbot.db")     
 cur = con.cursor()
-
-chat_history = """
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    password TEXT
-);
-"""
-res = cur.execute(chat_history)
-res.fetchone()
 
 chat_history = """
 CREATE TABLE chat_history (

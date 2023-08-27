@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,redirect,render_template
+from flask_admin.menu import MenuLink
 from flask_cors import CORS
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -16,6 +17,11 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
 from langchain.chains import RetrievalQA
+import os
+from flask_admin import Admin,AdminIndexView
+from flask_admin.contrib.sqla import ModelView
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_sqlalchemy import SQLAlchemy
 
 load_dotenv()
 
@@ -30,8 +36,36 @@ handler = logging.FileHandler('chatbot.log', mode='w')  # Specify the log file n
 handler.setFormatter(formatter)
 
 logger.addHandler(handler)
-
 app = Flask(__name__)
+flask_db = SQLAlchemy()
+app.secret_key= "512204f79fd3812be92b17c211b06d82"
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///chatbot.db'
+class users(flask_db.Model,UserMixin):
+    id = flask_db.Column(flask_db.Integer, primary_key=True)
+    name = flask_db.Column(flask_db.String(80), unique=True)
+    password = flask_db.Column(flask_db.String(120))
+    is_admin = flask_db.Column(flask_db.Boolean, default=False)
+
+with app.app_context():
+    flask_db.init_app(app)
+    flask_db.create_all()  
+
+def create_first_admin_user():
+    if not users.query.filter_by(is_admin=True).first():
+        new_user = users(name=os.getenv('admin_username'), password=os.getenv('admin_password'), is_admin=True)
+        flask_db.session.add(new_user)
+        flask_db.session.commit()
+
+@app.before_request
+def before_request():
+    create_first_admin_user()
+
+login_manager = LoginManager(app)
+login_manager.init_app(app)
+@login_manager.user_loader
+def load_user(id):
+    return users.query.get(int(id))
+
 CORS(app)
 
 def load_documents(folder_id):
@@ -82,11 +116,13 @@ def create_index(llm, db):
 def create_llm(temperature):
     return ChatOpenAI(model_name="gpt-4-0613", openai_api_key=OPENAI_API_KEY, temperature=temperature)
 
+
+
 @app.route('/chat', methods=['POST'])
 def chat():
 
     try:
-        con = sqlite3.connect("chatbot.db")
+        con = sqlite3.connect("instance/chatbot.db")
         cur = con.cursor()
 
         data = request.json
@@ -190,7 +226,7 @@ def retrain():
 def get_chats(chat_id):
     try:
         # Connect to the SQLite database
-        conn = sqlite3.connect('chatbot.db')
+        conn = sqlite3.connect('instance/chatbot.db')
         cursor = conn.cursor()
 
         # Fetch chat entries for the specified chat ID and user ID
@@ -213,7 +249,7 @@ def get_chats(chat_id):
 def get_all_chat_history(user_id):
     try:
         # Connect to the SQLite database
-        conn = sqlite3.connect('chatbot.db')
+        conn = sqlite3.connect('instance/chatbot.db')
         cursor = conn.cursor()
 
         # Fetch chat history for the specified user
@@ -241,7 +277,7 @@ def create_user():
         password = user_data['password']
 
         # Connect to the SQLite database
-        conn = sqlite3.connect('chatbot.db')
+        conn = sqlite3.connect('instance/chatbot.db')
         cursor = conn.cursor()
 
         # Insert the new user into the database
@@ -261,7 +297,7 @@ def create_user():
 def delete_user(user_id):
     try:
         # Connect to the SQLite database
-        conn = sqlite3.connect('chatbot.db')
+        conn = sqlite3.connect('instance/chatbot.db')
         cursor = conn.cursor()
 
         # Delete the user
@@ -281,7 +317,7 @@ def delete_user(user_id):
 def get_users():
     try:
         # Connect to the SQLite database
-        conn = sqlite3.connect('chatbot.db')
+        conn = sqlite3.connect('instance/chatbot.db')
         cursor = conn.cursor()
 
         # Fetch all users from the database
@@ -299,5 +335,78 @@ def get_users():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        admin_user = users.query.filter_by(name=username).first()
+        if admin_user and admin_user.password == password:
+            login_user(admin_user)
+            return redirect("/admin")
+        
+        print("PRINT USER :", username)
+        user = users.query.filter_by(name=username).first()
+        print("PRINT USER :", user)
+
+        if user and user.password == password:
+            login_user(user)
+            return redirect("/admin")
+        
+    return render_template('login.html') 
+
+
+
+class DashboardView(AdminIndexView):
+
+    def is_visible(self):
+        
+        return False
+
+class UserAdmin(ModelView):
+    def is_accessible(self):
+        return current_user.is_authenticated and current_user.is_admin
+
+class LoginMenuLink(MenuLink):
+
+    def is_accessible(self):
+        return not current_user.is_authenticated 
+
+
+class LogoutMenuLink(MenuLink):
+
+    def is_accessible(self):
+        return current_user.is_authenticated  
+class Mymodelview(ModelView):
+    def is_accessible(self):
+        return current_user.is_authenticated   
+ 
+admin = Admin(app, name='Admin Panel', template_mode='bootstrap3',index_view=DashboardView())
+admin.add_view(Mymodelview(users, flask_db.session))
+
+
+admin.add_link(LogoutMenuLink(name='Logout', category='', url="/logout"))
+admin.add_link(LoginMenuLink(name='Login', category='', url="/login"))
+
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect("/login")
+
+@app.route('/user_login', methods=['GET', 'POST'])
+def user_login():
+    import json
+    if request.method == 'POST':
+        data = json.loads(request.data.decode('utf-8'))
+        username = data.get('username')
+        password = data.get('password')
+        user = users.query.filter_by(name=username).first()
+        if user and user.password == password:
+            if user.is_admin == 0:
+                return jsonify({"message": "logged In"}), 200
+                
+    return jsonify({"message": "username or password is incorrect or you are an admin"}), 400
 if __name__ == '__main__':
     app.run(debug=True)
+   
