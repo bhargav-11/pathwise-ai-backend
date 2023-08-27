@@ -335,6 +335,30 @@ def get_users():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Endpoint to reset a user's password
+@app.route('/reset_password/<int:user_id>', methods=['PUT'])
+def reset_password(user_id):
+    try:
+        # Get new password data from the request
+        new_password_data = request.get_json()
+        new_password = new_password_data['new_password']
+
+        # Connect to the SQLite database
+        conn = sqlite3.connect('instance/chatbot.db')
+        cursor = conn.cursor()
+
+        # Update the user's password in the database
+        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, user_id))
+        conn.commit()
+
+        # Close the database connection
+        conn.close()
+
+        return jsonify({'message': 'Password reset successful'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
 
@@ -405,7 +429,7 @@ def user_login():
         if user and user.password == password:
             if user.is_admin == 0:
                 return jsonify({"message": "logged In"}), 200
-                
+
     return jsonify({"message": "username or password is incorrect or you are an admin"}), 400
 if __name__ == '__main__':
     app.run(debug=True)
