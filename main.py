@@ -359,9 +359,8 @@ def login():
 
 
 class DashboardView(AdminIndexView):
-
+    intro_template = 'admin_intro.html'
     def is_visible(self):
-        
         return False
 
 class UserAdmin(ModelView):
@@ -378,9 +377,15 @@ class LogoutMenuLink(MenuLink):
 
     def is_accessible(self):
         return current_user.is_authenticated  
+
 class Mymodelview(ModelView):
+    column_display_pk = True
+    column_searchable_list = ['name']
+    column_filters = ['name', 'is_admin']
+    
     def is_accessible(self):
         return current_user.is_authenticated   
+    
  
 admin = Admin(app, name='Admin Panel', template_mode='bootstrap3',index_view=DashboardView())
 admin.add_view(Mymodelview(users, flask_db.session))
@@ -404,7 +409,7 @@ def user_login():
         user = users.query.filter_by(name=username).first()
         if user and user.password == password:
             if user.is_admin == 0:
-                return jsonify({"message": "logged In"}), 200
+                return jsonify({"message": "logged In","user_id": user.id}), 200
                 
     return jsonify({"message": "username or password is incorrect or you are an admin"}), 400
 if __name__ == '__main__':
