@@ -267,17 +267,17 @@ def get_all_chat_history(user_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/delete_chat_entry/<int:entry_id>', methods=['DELETE'])
-def delete_entry(entry_id):
+@app.route('/delete_chat_history/<int:history_id>', methods=['DELETE'])
+def delete_entry(history_id):
     try:
         conn = sqlite3.connect('instance/chatbot.db')
         cursor = conn.cursor()
 
         # First, delete corresponding chats
-        cursor.execute("DELETE FROM chats WHERE chat_id = ?", (entry_id,))
+        cursor.execute("DELETE FROM chats WHERE chat_id = ?", (history_id,))
         
         # Then, delete the chat history entry
-        cursor.execute("DELETE FROM chat_history WHERE id = ?", (entry_id,))
+        cursor.execute("DELETE FROM chat_history WHERE id = ?", (history_id,))
         
         conn.commit()
         conn.close()
@@ -400,10 +400,9 @@ def login():
 
 
 
-class DashboardView(AdminIndexView):
-    intro_template = 'admin_intro.html'
-    def is_visible(self):
-        return False
+# class DashboardView(AdminIndexView):
+#     def is_visible(self):
+#         return True
 
 class UserAdmin(ModelView):
     def is_accessible(self):
@@ -413,7 +412,6 @@ class LoginMenuLink(MenuLink):
 
     def is_accessible(self):
         return not current_user.is_authenticated 
-
 
 class LogoutMenuLink(MenuLink):
 
@@ -428,8 +426,9 @@ class Mymodelview(ModelView):
     def is_accessible(self):
         return current_user.is_authenticated   
     
- 
-admin = Admin(app, name='Admin Panel', template_mode='bootstrap3',index_view=DashboardView())
+
+admin = Admin(app, name='Admin Panel', template_mode='bootstrap3')
+            #   index_view=DashboardView())
 admin.add_view(Mymodelview(users, flask_db.session))
 
 
@@ -454,6 +453,7 @@ def user_login():
                 return jsonify({"message": "logged In","user_id": user.id}), 200
                 
     return jsonify({"message": "username or password is incorrect or you are an admin"}), 400
+
 if __name__ == '__main__':
     app.run(debug=True)
    
