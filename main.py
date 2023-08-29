@@ -239,7 +239,7 @@ def get_chats(chat_id):
         # Convert chat data into a list of dictionaries
         chat_list = [{'user': entry[0], 'bot': entry[1]} for entry in chats]
 
-        return jsonify(chat_list)
+        return jsonify(chat_list), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -262,10 +262,28 @@ def get_all_chat_history(user_id):
         # Convert chat history data into a list of dictionaries
         chat_history_list = [{'id': entry[0], 'folderid': entry[1], 'message': entry[2]} for entry in chat_history]
 
-        return jsonify(chat_history_list)
+        return jsonify(chat_history_list), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/delete_chat_entry/<int:entry_id>', methods=['DELETE'])
+def delete_entry(entry_id):
+    try:
+        conn = sqlite3.connect('instance/chatbot.db')
+        cursor = conn.cursor()
+
+        # First, delete corresponding chats
+        cursor.execute("DELETE FROM chats WHERE chat_id = ?", (entry_id,))
+        
+        # Then, delete the chat history entry
+        cursor.execute("DELETE FROM chat_history WHERE id = ?", (entry_id,))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Chat history deleted successfully."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Endpoint to create a new user
 @app.route('/create_user', methods=['POST'])
@@ -331,6 +349,30 @@ def get_users():
         users_list = [{'id': user[0], 'name': user[1], 'password': user[2]} for user in users]
 
         return jsonify(users_list), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Endpoint to reset a user's password
+@app.route('/reset_password/<int:user_id>', methods=['PUT'])
+def reset_password(user_id):
+    try:
+        # Get new password data from the request
+        new_password_data = request.get_json()
+        new_password = new_password_data['new_password']
+
+        # Connect to the SQLite database
+        conn = sqlite3.connect('instance/chatbot.db')
+        cursor = conn.cursor()
+
+        # Update the user's password in the database
+        cursor.execute("UPDATE users SET password = ? WHERE id = ?", (new_password, user_id))
+        conn.commit()
+
+        # Close the database connection
+        conn.close()
+
+        return jsonify({'message': 'Password reset successful'}), 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
