@@ -253,7 +253,7 @@ def get_all_chat_history(user_id):
         cursor = conn.cursor()
 
         # Fetch chat history for the specified user
-        cursor.execute("SELECT id, folderid, message FROM chat_history WHERE user_key = ?", (user_id,))
+        cursor.execute("SELECT id, folderid, message FROM chat_history WHERE user_key = ? ORDER BY id DESC", (user_id,))
         chat_history = cursor.fetchall()
 
         # Close the database connection
