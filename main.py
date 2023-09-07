@@ -22,6 +22,7 @@ from flask_admin import Admin,AdminIndexView
 from flask_admin.contrib.sqla import ModelView
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
+from langchain.prompts import PromptTemplate
 
 load_dotenv()
 
@@ -110,8 +111,30 @@ def create_chroma_db(texts, embeddings, folder_id, reembed_flag_bool):
     else:
         return create_chroma_db_without_embeddings(embeddings, folder_id)
 
-def create_index(llm, db):
-    return RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=db.as_retriever(search_kwargs={"k": 3}), return_source_documents=True)
+def create_index(llm, db, chat_history_list):
+
+    qa_template = """
+        You are helpful AI assistant for an organization named Pathwise. Your name is Pathwise AI.
+        Use the following pieces of context to answer the users question. 
+        If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+        context: {{context}}
+        =========
+        chat history: {chat_history}
+        =========
+        question: {{question}}
+        ======
+        """.format(chat_history=chat_history_list)
+
+    QA_PROMPT = PromptTemplate(template=qa_template, input_variables=["context", "question"])
+
+    return RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",
+            chain_type_kwargs={'prompt': QA_PROMPT},
+            retriever=db.as_retriever(search_kwargs={"k": 3}),
+            return_source_documents=True
+        )
 
 def create_llm(temperature):
     return ChatOpenAI(model_name="gpt-4-0613", openai_api_key=OPENAI_API_KEY, temperature=temperature)
@@ -154,23 +177,40 @@ def chat():
             texts = split_documents(docs)
             embeddings = generate_embeddings()
             db = create_chroma_db(texts, embeddings, folder_id, retrain)
+            chat_history_list = []
         else:
             embeddings = generate_embeddings()
             db = create_chroma_db_without_embeddings(embeddings, folder_id)
+            get_chat_history = """SELECT *
+                                FROM chats
+                                WHERE chat_id = ?
+                                ORDER BY id DESC
+                                LIMIT 2"""
+
+            res = cur.execute(get_chat_history, (chat_history_id,))
+            results = cur.fetchall()
+            chat_history_list = []
+            if results:
+                for item in results:
+                    if 'Source' in item[2]:
+                        chat_history_answer = item[2].split('Source')[0]
+                    else:
+                        chat_history_answer = item[2]
+
+                    chat_history_list.append((item[1], chat_history_answer))
 
         llm = create_llm(temperature)
-        qa = create_index(llm, db)
+        qa = create_index(llm, db, chat_history_list)
 
         answer = qa({"query": question})
 
-        answer_with_sources = "Answer: {}\n".format(answer['result'])
+        answer_with_sources = "{}\n".format(answer['result'])
         for doc in answer.get("source_documents", []):
             answer_with_sources = answer_with_sources + "\nSource: {}{}".format(doc.metadata.get("title", ''),
             "  Page: {}".format(doc.metadata.get("page", '')) if doc.metadata.get("page") else '')
 
         chat_answer_query = "INSERT INTO chats (user, bot, chat_id) VALUES (?, ?, ?);"
 
-        print(chat_history_id)
         res = cur.execute(chat_answer_query, (question, answer_with_sources, chat_history_id))
         print(res.lastrowid)
         con.commit()
